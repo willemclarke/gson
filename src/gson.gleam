@@ -27,7 +27,7 @@ pub fn parse_json(input: String) -> Result(#(JValue, String), String) {
 }
 
 // TODO: make parse_null & parse_bool return results
-fn parse_null(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_null(input: String) -> option.Option(#(JValue, String)) {
   case input {
     "null" -> {
       let next_string = string.drop_left(from: input, up_to: 4)
@@ -37,7 +37,7 @@ fn parse_null(input: String) -> option.Option(#(JValue, String)) {
   }
 }
 
-fn parse_bool(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_bool(input: String) -> option.Option(#(JValue, String)) {
   case input {
     "true" -> {
       let next_string = string.drop_left(from: input, up_to: 4)

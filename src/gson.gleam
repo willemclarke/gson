@@ -1,13 +1,11 @@
 import gleam/io
 import gleam/float
+import gleam/int
 import gleam/string
-import gleam/list.{Continue, Stop}
-import gleam/option
+import gleam/list
 import gleam/result
 
 // https://parsed.dev/articles/Writing_your_own_JSON_parser_in_Haskell
-
-// --- parser ---
 
 pub type JValue {
   JString(String)
@@ -18,38 +16,66 @@ pub type JValue {
   JArray(List(JValue))
 }
 
-pub fn parse_json(input: String) -> Result(#(JValue, String), String) {
-  let null = option.to_result(parse_null(input), "Unable to parse null")
-  let bool = option.to_result(parse_bool(input), "Unable to parse bool")
+pub type Tokens =
+  List(String)
+
+pub fn parse(input: String) -> Result(#(JValue, Tokens), String) {
+  let input = string.to_graphemes(input)
+
+  let null = parse_null(input)
+  let bool = parse_bool(input)
 
   null
   |> result.or(bool)
 }
 
-// TODO: make parse_null & parse_bool return results
-pub fn parse_null(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
-    "null" -> {
-      let next_string = string.drop_left(from: input, up_to: 4)
-      option.Some(#(JNull, next_string))
-    }
-    _ -> option.None
+    [] -> Error("Not found")
+    ["n", "u", "l", "l", ..input] -> Ok(#(JNull, input))
+    _ -> Error("Not found")
   }
 }
 
-pub fn parse_bool(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
-    "true" -> {
-      let next_string = string.drop_left(from: input, up_to: 4)
-      option.Some(#(JBool(True), next_string))
-    }
-    "false" -> {
-      let next_string = string.drop_left(from: input, up_to: 5)
-      option.Some(#(JBool(False), next_string))
-    }
-    _ -> option.None
+    [] -> Error("Not found")
+    ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
+    ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(True), input))
+    _ -> Error("Not found")
   }
 }
+
+// pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
+//   case input {
+//     ["-", ..input] -> Error("poop")
+//   }
+// }
+
+// pub fn extract_integer(input: Tokens) -> Result(#(JValue, Tokens), String) {
+//   case input {
+//     ["0", ..input] -> Ok(#(JNumber(int.to_float(0)), input))
+//     ["1", ..input] -> Ok(#(JNumber(int.to_float(1)), input))
+//     ["2", ..input] -> Ok(#(JNumber(int.to_float(2)), input))
+//     ["3", ..input] -> Ok(#(JNumber(int.to_float(3)), input))
+//     ["4", ..input] -> Ok(#(JNumber(int.to_float(4)), input))
+//     ["5", ..input] -> Ok(#(JNumber(int.to_float(5)), input))
+//     ["6", ..input] -> Ok(#(JNumber(int.to_float(6)), input))
+//     ["7", ..input] -> Ok(#(JNumber(int.to_float(7)), input))
+//     ["8", ..input] -> Ok(#(JNumber(int.to_float(8)), input))
+//     ["9", ..input] -> Ok(#(JNumber(int.to_float(9)), input))
+//     _ -> Error("Not a valid number")
+//   }
+// }
+
+// pub fn skip_whitespace(input: Tokens) -> Tokens {
+//   case input {
+//     [" ", ..input] -> skip_whitespace(input)
+//     ["\t", ..input] -> skip_whitespace(input)
+//     ["\n", ..input] -> skip_whitespace(input)
+//     input -> list.drop_while(input, fn(s) { s == " " || s == "\t" })
+//   }
+// }
 
 // --- render thing ----
 
@@ -88,10 +114,10 @@ pub fn render_json(jvalue: JValue) -> String {
 }
 
 pub fn main() {
-  let should_work = parse_json("nul")
-  let should_work_2 = parse_json("nul")
-  let should_work_3 = parse_json("true")
-  let should_work_4 = parse_json("false")
+  let should_work = parse("null")
+  let should_work_2 = parse("null")
+  let should_work_3 = parse("truewith extra tokens")
+  let should_work_4 = parse("123")
 
   // let string = render_json(JString("poop de poop"))
   // let object =

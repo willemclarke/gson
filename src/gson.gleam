@@ -20,13 +20,15 @@ pub type Tokens =
   List(String)
 
 pub fn parse(input: String) -> Result(#(JValue, Tokens), String) {
-  let input = string.to_graphemes(input)
+  let graphemes = string.to_graphemes(input)
 
-  let null = parse_null(input)
-  let bool = parse_bool(input)
+  let null = parse_null(graphemes)
+  let bool = parse_bool(graphemes)
+  let number = parse_number(graphemes)
 
   null
   |> result.or(bool)
+  |> result.or(number)
 }
 
 pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
@@ -49,7 +51,28 @@ pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), String) {
 // ['1', '.', '3'] = 1.3
 // ['-', '1', '.', '3'] = -1.3
 pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
-  todo
+  case input {
+    ["-", ..] -> {
+      parse_double(input)
+      |> result.try(fn(res) {
+        let #(float, rest) = res
+        Ok(#(JNumber(float), rest))
+      })
+    }
+    [x, ..] -> {
+      case is_digit(x) {
+        True -> {
+          parse_double(input)
+          |> result.try(fn(res) {
+            let #(float, rest) = res
+            Ok(#(JNumber(float), rest))
+          })
+        }
+        False -> Error("Cannot parse into number")
+      }
+    }
+    _ -> Error("Cannot parse into number")
+  }
 }
 
 pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), String) {
@@ -155,7 +178,8 @@ pub fn main() {
   // let should_work_3 = parse("truewith extra tokens")
   // let should_work_4 = parse("123")
 
-  io.debug(parse_double(["-", "1", "2", "w", "a", "b"]))
-  io.debug(parse_double(["-", "1", "2", "3", "4"]))
-  io.debug(parse_double(["1", "5", ".", "3", "6", "w", "a"]))
+  io.debug(parse("1234cat"))
+  io.debug(parse("-1234"))
+  io.debug(parse("15.36wa"))
+  io.debug(parse("-12.34"))
 }

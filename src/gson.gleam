@@ -31,7 +31,6 @@ pub fn parse(input: String) -> Result(#(JValue, Tokens), String) {
 
 pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
-    [] -> Error("Not found")
     ["n", "u", "l", "l", ..input] -> Ok(#(JNull, input))
     _ -> Error("Not found")
   }
@@ -39,43 +38,80 @@ pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
 
 pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
-    [] -> Error("Not found")
     ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
     ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(True), input))
     _ -> Error("Not found")
   }
 }
 
-// pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
-//   case input {
-//     ["-", ..input] -> Error("poop")
-//   }
-// }
+// [1,2,3] = 123
+// ['-', '1', '2', '3'] = -123
+// ['1', '.', '3'] = 1.3
+// ['-', '1', '.', '3'] = -1.3
+pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
+  todo
+}
 
-// pub fn extract_integer(input: Tokens) -> Result(#(JValue, Tokens), String) {
-//   case input {
-//     ["0", ..input] -> Ok(#(JNumber(int.to_float(0)), input))
-//     ["1", ..input] -> Ok(#(JNumber(int.to_float(1)), input))
-//     ["2", ..input] -> Ok(#(JNumber(int.to_float(2)), input))
-//     ["3", ..input] -> Ok(#(JNumber(int.to_float(3)), input))
-//     ["4", ..input] -> Ok(#(JNumber(int.to_float(4)), input))
-//     ["5", ..input] -> Ok(#(JNumber(int.to_float(5)), input))
-//     ["6", ..input] -> Ok(#(JNumber(int.to_float(6)), input))
-//     ["7", ..input] -> Ok(#(JNumber(int.to_float(7)), input))
-//     ["8", ..input] -> Ok(#(JNumber(int.to_float(8)), input))
-//     ["9", ..input] -> Ok(#(JNumber(int.to_float(9)), input))
-//     _ -> Error("Not a valid number")
-//   }
-// }
+pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), String) {
+  let #(whole_integer, remaining) = extract_integer(input)
 
-// pub fn skip_whitespace(input: Tokens) -> Tokens {
-//   case input {
-//     [" ", ..input] -> skip_whitespace(input)
-//     ["\t", ..input] -> skip_whitespace(input)
-//     ["\n", ..input] -> skip_whitespace(input)
-//     input -> list.drop_while(input, fn(s) { s == " " || s == "\t" })
-//   }
-// }
+  case remaining {
+    ["-", ..xs] -> {
+      parse_double(xs)
+      |> result.map(fn(pair) {
+        let #(num, rest) = pair
+        #(float.negate(num), rest)
+      })
+    }
+    [".", ..xs] -> {
+      let #(fractional_part, rest) = extract_integer(xs)
+
+      let whole_as_string = string.join(whole_integer, "")
+      let fractional_as_string = string.join(fractional_part, "")
+      let to_float = whole_as_string <> "." <> fractional_as_string
+
+      case float.parse(to_float) {
+        Ok(float) -> Ok(#(float, rest))
+        Error(_) -> Error("Unable to parse to float")
+      }
+    }
+    _ -> {
+      let as_float =
+        whole_integer
+        |> string.join("")
+        |> int.parse()
+        |> result.unwrap(0)
+        |> int.to_float()
+
+      Ok(#(as_float, remaining))
+    }
+  }
+}
+
+pub fn extract_integer(input: Tokens) -> #(Tokens, Tokens) {
+  case input {
+    [] -> #([], [])
+
+    [x, ..xs] -> {
+      case is_digit(x) {
+        True -> {
+          let #(nums, rest) = extract_integer(xs)
+          let appended = [x, ..nums]
+
+          #(appended, rest)
+        }
+        False -> #([], [x, ..xs])
+      }
+    }
+  }
+}
+
+pub fn is_digit(input: String) -> Bool {
+  case input {
+    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
+    _ -> False
+  }
+}
 
 // --- render thing ----
 
@@ -114,33 +150,12 @@ pub fn render_json(jvalue: JValue) -> String {
 }
 
 pub fn main() {
-  let should_work = parse("null")
-  let should_work_2 = parse("null")
-  let should_work_3 = parse("truewith extra tokens")
-  let should_work_4 = parse("123")
+  // let should_work = parse("null")
+  // let should_work_2 = parse("null")
+  // let should_work_3 = parse("truewith extra tokens")
+  // let should_work_4 = parse("123")
 
-  // let string = render_json(JString("poop de poop"))
-  // let object =
-  //   render_json(
-  //     JObject([
-  //       #("stringKey", JString("poop1")),
-  //       #("numberKey", JNumber(54.7)),
-  //       #("nullKey", JNull),
-  //       #("trueKey", JBool(True)),
-  //       #("falseKey", JBool(False)),
-  //     ]),
-  //   )
-
-  // let array =
-  //   render_json(
-  //     JArray([
-  //       JString("I'm a string"),
-  //       JObject([#("key1", JString("poop1")), #("key2", JNumber(54.7))]),
-  //     ]),
-  //   )
-
-  io.debug(should_work)
-  io.debug(should_work_2)
-  io.debug(should_work_3)
-  io.debug(should_work_4)
+  io.debug(parse_double(["-", "1", "2", "w", "a", "b"]))
+  io.debug(parse_double(["-", "1", "2", "3", "4"]))
+  io.debug(parse_double(["1", "5", ".", "3", "6", "w", "a"]))
 }

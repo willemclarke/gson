@@ -1,13 +1,11 @@
 import gleam/io
 import gleam/float
+import gleam/int
 import gleam/string
-import gleam/list.{Continue, Stop}
-import gleam/option
+import gleam/list
 import gleam/result
 
 // https://parsed.dev/articles/Writing_your_own_JSON_parser_in_Haskell
-
-// --- parser ---
 
 pub type JValue {
   JString(String)
@@ -18,37 +16,136 @@ pub type JValue {
   JArray(List(JValue))
 }
 
-pub fn parse_json(input: String) -> Result(#(JValue, String), String) {
-  let null = option.to_result(parse_null(input), "Unable to parse null")
-  let bool = option.to_result(parse_bool(input), "Unable to parse bool")
+pub type ParseError {
+  ParseError(expected: String, got: String)
+}
+
+pub type Tokens =
+  List(String)
+
+pub fn parse(input: String) -> Result(#(JValue, Tokens), ParseError) {
+  let graphemes = string.to_graphemes(input)
+
+  let null = parse_null(graphemes)
+  let bool = parse_bool(graphemes)
+  let number = parse_number(graphemes)
 
   null
   |> result.or(bool)
+  |> result.or(number)
 }
 
-// TODO: make parse_null & parse_bool return results
-pub fn parse_null(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   case input {
-    "null" -> {
-      let next_string = string.drop_left(from: input, up_to: 4)
-      option.Some(#(JNull, next_string))
-    }
-    _ -> option.None
+    ["n", "u", "l", "l", ..input] -> Ok(#(JNull, input))
+    _ -> Error(ParseError(expected: "null", got: got_to_string(input)))
   }
 }
 
-pub fn parse_bool(input: String) -> option.Option(#(JValue, String)) {
+pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   case input {
-    "true" -> {
-      let next_string = string.drop_left(from: input, up_to: 4)
-      option.Some(#(JBool(True), next_string))
-    }
-    "false" -> {
-      let next_string = string.drop_left(from: input, up_to: 5)
-      option.Some(#(JBool(False), next_string))
-    }
-    _ -> option.None
+    ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
+    ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(False), input))
+    _ -> Error(ParseError(expected: "true/false", got: got_to_string(input)))
   }
+}
+
+pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
+  case input {
+    ["-", ..] -> {
+      parse_double(input)
+      |> result.try(fn(res) {
+        let #(float, rest) = res
+        Ok(#(JNumber(float), rest))
+      })
+    }
+    [x, ..] -> {
+      case is_digit(x) {
+        True -> {
+          parse_double(input)
+          |> result.try(fn(res) {
+            let #(float, rest) = res
+            Ok(#(JNumber(float), rest))
+          })
+        }
+        False -> Error(ParseError(expected: "digit", got: x))
+      }
+    }
+    _ -> Error(ParseError(expected: "digit or -", got: get_firt_token(input)))
+  }
+}
+
+pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), ParseError) {
+  let #(whole_integer, remaining) = extract_integer(input)
+
+  case remaining {
+    ["-", ..xs] -> {
+      parse_double(xs)
+      |> result.map(fn(pair) {
+        let #(num, rest) = pair
+        #(float.negate(num), rest)
+      })
+    }
+    [".", ..xs] -> {
+      let #(fractional_part, rest) = extract_integer(xs)
+
+      let whole_as_string = string.join(whole_integer, "")
+      let fractional_as_string = string.join(fractional_part, "")
+      let to_float = whole_as_string <> "." <> fractional_as_string
+
+      case float.parse(to_float) {
+        Ok(float) -> Ok(#(float, rest))
+        Error(_) -> Error(ParseError(expected: "valid float", got: to_float))
+      }
+    }
+    _ -> {
+      whole_integer
+      |> string.join("")
+      |> int.parse()
+      |> result.try(fn(number) {
+        let float = int.to_float(number)
+        Ok(#(float, remaining))
+      })
+      |> result.map_error(fn(_) {
+        ParseError(expected: "valid integer", got: got_to_string(whole_integer))
+      })
+    }
+  }
+}
+
+pub fn extract_integer(input: Tokens) -> #(Tokens, Tokens) {
+  case input {
+    [] -> #([], [])
+
+    [x, ..xs] -> {
+      case is_digit(x) {
+        True -> {
+          let #(nums, rest) = extract_integer(xs)
+          let appended = [x, ..nums]
+
+          #(appended, rest)
+        }
+        False -> #([], [x, ..xs])
+      }
+    }
+  }
+}
+
+pub fn is_digit(input: String) -> Bool {
+  case input {
+    "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
+    _ -> False
+  }
+}
+
+fn got_to_string(got: Tokens) -> String {
+  string.join(got, "")
+}
+
+fn get_firt_token(tokens: Tokens) -> String {
+  tokens
+  |> list.first()
+  |> result.unwrap("")
 }
 
 // --- render thing ----
@@ -88,33 +185,12 @@ pub fn render_json(jvalue: JValue) -> String {
 }
 
 pub fn main() {
-  let should_work = parse_json("nul")
-  let should_work_2 = parse_json("nul")
-  let should_work_3 = parse_json("true")
-  let should_work_4 = parse_json("false")
-
-  // let string = render_json(JString("poop de poop"))
-  // let object =
-  //   render_json(
-  //     JObject([
-  //       #("stringKey", JString("poop1")),
-  //       #("numberKey", JNumber(54.7)),
-  //       #("nullKey", JNull),
-  //       #("trueKey", JBool(True)),
-  //       #("falseKey", JBool(False)),
-  //     ]),
-  //   )
-
-  // let array =
-  //   render_json(
-  //     JArray([
-  //       JString("I'm a string"),
-  //       JObject([#("key1", JString("poop1")), #("key2", JNumber(54.7))]),
-  //     ]),
-  //   )
-
-  io.debug(should_work)
-  io.debug(should_work_2)
-  io.debug(should_work_3)
-  io.debug(should_work_4)
+  io.debug(parse("null"))
+  io.debug(parse("truewith extra tokens"))
+  io.debug(parse("12"))
+  io.debug(parse("1234cat"))
+  io.debug(parse("-1234"))
+  io.debug(parse("1.5wa"))
+  io.debug(parse("15.36wa"))
+  io.debug(parse("-12.34"))
 }

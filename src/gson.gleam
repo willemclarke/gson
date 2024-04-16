@@ -41,15 +41,11 @@ pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
 pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
     ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
-    ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(True), input))
+    ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(False), input))
     _ -> Error("Not found")
   }
 }
 
-// [1,2,3] = 123
-// ['-', '1', '2', '3'] = -123
-// ['1', '.', '3'] = 1.3
-// ['-', '1', '.', '3'] = -1.3
 pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
   case input {
     ["-", ..] -> {
@@ -180,6 +176,7 @@ pub fn main() {
 
   io.debug(parse("1234cat"))
   io.debug(parse("-1234"))
+  io.debug(parse("1.5wa"))
   io.debug(parse("15.36wa"))
   io.debug(parse("-12.34"))
 }

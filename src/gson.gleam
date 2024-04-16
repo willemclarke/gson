@@ -16,10 +16,14 @@ pub type JValue {
   JArray(List(JValue))
 }
 
+pub type ParseError {
+  ParseError(expected: String, got: String)
+}
+
 pub type Tokens =
   List(String)
 
-pub fn parse(input: String) -> Result(#(JValue, Tokens), String) {
+pub fn parse(input: String) -> Result(#(JValue, Tokens), ParseError) {
   let graphemes = string.to_graphemes(input)
 
   let null = parse_null(graphemes)
@@ -31,22 +35,22 @@ pub fn parse(input: String) -> Result(#(JValue, Tokens), String) {
   |> result.or(number)
 }
 
-pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), String) {
+pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   case input {
     ["n", "u", "l", "l", ..input] -> Ok(#(JNull, input))
-    _ -> Error("Not found")
+    _ -> Error(ParseError(expected: "null", got: got_to_string(input)))
   }
 }
 
-pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), String) {
+pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   case input {
     ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
     ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(False), input))
-    _ -> Error("Not found")
+    _ -> Error(ParseError(expected: "true/false", got: got_to_string(input)))
   }
 }
 
-pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
+pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   case input {
     ["-", ..] -> {
       parse_double(input)
@@ -64,14 +68,14 @@ pub fn parse_number(input: Tokens) -> Result(#(JValue, Tokens), String) {
             Ok(#(JNumber(float), rest))
           })
         }
-        False -> Error("Cannot parse into number")
+        False -> Error(ParseError(expected: "digit", got: x))
       }
     }
-    _ -> Error("Cannot parse into number")
+    _ -> Error(ParseError(expected: "digit or -", got: get_firt_token(input)))
   }
 }
 
-pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), String) {
+pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), ParseError) {
   let #(whole_integer, remaining) = extract_integer(input)
 
   case remaining {
@@ -91,18 +95,20 @@ pub fn parse_double(input: Tokens) -> Result(#(Float, Tokens), String) {
 
       case float.parse(to_float) {
         Ok(float) -> Ok(#(float, rest))
-        Error(_) -> Error("Unable to parse to float")
+        Error(_) -> Error(ParseError(expected: "valid float", got: to_float))
       }
     }
     _ -> {
-      let as_float =
-        whole_integer
-        |> string.join("")
-        |> int.parse()
-        |> result.unwrap(0)
-        |> int.to_float()
-
-      Ok(#(as_float, remaining))
+      whole_integer
+      |> string.join("")
+      |> int.parse()
+      |> result.try(fn(number) {
+        let float = int.to_float(number)
+        Ok(#(float, remaining))
+      })
+      |> result.map_error(fn(_) {
+        ParseError(expected: "valid integer", got: got_to_string(whole_integer))
+      })
     }
   }
 }
@@ -130,6 +136,16 @@ pub fn is_digit(input: String) -> Bool {
     "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
     _ -> False
   }
+}
+
+fn got_to_string(got: Tokens) -> String {
+  string.join(got, "")
+}
+
+fn get_firt_token(tokens: Tokens) -> String {
+  tokens
+  |> list.first()
+  |> result.unwrap("")
 }
 
 // --- render thing ----
@@ -169,11 +185,9 @@ pub fn render_json(jvalue: JValue) -> String {
 }
 
 pub fn main() {
-  // let should_work = parse("null")
-  // let should_work_2 = parse("null")
-  // let should_work_3 = parse("truewith extra tokens")
-  // let should_work_4 = parse("123")
-
+  io.debug(parse("null"))
+  io.debug(parse("truewith extra tokens"))
+  io.debug(parse("12"))
   io.debug(parse("1234cat"))
   io.debug(parse("-1234"))
   io.debug(parse("1.5wa"))

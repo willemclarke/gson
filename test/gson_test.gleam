@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import gson.{JBool, JNull, JNumber}
+import gson.{JBool, JNull, JNumber, ParseError}
 import gleam/string
 
 pub fn main() {
@@ -8,6 +8,7 @@ pub fn main() {
 }
 
 pub fn null_test() {
+  // valid cases
   string.split("null", "")
   |> gson.parse_null()
   |> should.equal(Ok(#(JNull, [])))
@@ -15,9 +16,15 @@ pub fn null_test() {
   string.split("nullhello", "")
   |> gson.parse_null()
   |> should.equal(Ok(#(JNull, ["h", "e", "l", "l", "o"])))
+
+  // error case
+  string.split("invalid", "")
+  |> gson.parse_null()
+  |> should.equal(Error(ParseError(expected: "null", got: "invalid")))
 }
 
 pub fn bool_test() {
+  // valid cases
   string.split("true", "")
   |> gson.parse_bool()
   |> should.equal(Ok(#(JBool(True), [])))
@@ -37,9 +44,15 @@ pub fn bool_test() {
   string.split("falseabc", "")
   |> gson.parse_bool()
   |> should.equal(Ok(#(JBool(False), ["a", "b", "c"])))
+
+  // error case
+  string.split("steelseries", "")
+  |> gson.parse_bool()
+  |> should.equal(Error(ParseError(expected: "true/false", got: "steelseries")))
 }
 
 pub fn number_test() {
+  // valid cases
   string.split("12", "")
   |> gson.parse_number()
   |> should.equal(Ok(#(JNumber(12.0), [])))
@@ -63,4 +76,9 @@ pub fn number_test() {
   string.split("-1690.7656", "")
   |> gson.parse_number()
   |> should.equal(Ok(#(JNumber(-1690.7656), [])))
+
+  // error case
+  string.split("invalid", "")
+  |> gson.parse_number()
+  |> should.equal(Error(ParseError(expected: "digit", got: "i")))
 }

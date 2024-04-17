@@ -4,6 +4,7 @@ import gleam/int
 import gleam/string
 import gleam/list
 import gleam/result
+import gleam/dict
 
 // https://parsed.dev/articles/Writing_your_own_JSON_parser_in_Haskell
 
@@ -14,7 +15,7 @@ pub type JValue {
   JNumber(Float)
   JBool(Bool)
   JNull
-  JObject(List(#(String, JValue)))
+  JObect(dict.Dict(String, JValue))
   JArray(List(JValue))
 }
 
@@ -38,12 +39,14 @@ pub fn parse_json(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
   let try_number = parse_number(input)
   let try_string = parse_string(input)
   let try_array = parse_array(input)
+  let try_object = parse_object(input)
 
   try_null
   |> result.or(try_bool)
   |> result.or(try_number)
   |> result.or(try_string)
   |> result.or(try_array)
+  |> result.or(try_object)
 }
 
 pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
@@ -213,6 +216,66 @@ fn parse_array_inner(
   }
 }
 
+pub fn parse_object(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
+  case input {
+    ["{", "}"] -> Ok(#(JObect(dict.new()), []))
+    ["{", ..rest] -> {
+      parse_object_inner(skip_whitespace(rest))
+      |> result.map(fn(tuple) {
+        let #(dict, remaining) = tuple
+        #(JObect(dict), remaining)
+      })
+    }
+    _ -> Error(ParseError(expected: "{", got: get_firt_token(input)))
+  }
+}
+
+fn parse_object_inner(
+  input: Tokens,
+) -> Result(#(dict.Dict(String, JValue), Tokens), ParseError) {
+  case input {
+    // if the first char is open quote, parse the object key
+    ["\"", ..rest] -> {
+      let #(key, remaining) = parse_string_inner(rest)
+
+      case remaining {
+        // if the first char is a `:`, we've parsed the key and now need to parse
+        // the value -> thus we call `parse_json` on the ..rest
+        [":", ..rest] -> {
+          parse_json(skip_whitespace(rest))
+          |> result.try(fn(tuple) {
+            let #(value, final_tokens) = tuple
+
+            case final_tokens {
+              [",", ..rest] -> {
+                parse_object_inner(skip_whitespace(rest))
+                |> result.map(fn(tuple) {
+                  let #(object, rem) = tuple
+                  #(dict.insert(object, key, value), rem)
+                })
+              }
+
+              ["}", ..rest] -> Ok(#(dict.insert(dict.new(), key, value), rest))
+
+              _ ->
+                Error(ParseError(
+                  expected: ",/}",
+                  got: get_firt_token(final_tokens),
+                ))
+            }
+          })
+        }
+
+        _ -> Error(ParseError(expected: ":", got: get_firt_token(remaining)))
+      }
+    }
+
+    // if we reach the `}` closing token, finish by instantiating an empty dict
+    ["}"] -> Ok(#(dict.new(), []))
+    _ -> Error(ParseError(expected: "\"", got: get_firt_token(input)))
+  }
+}
+
 // --- helper methods ---
 
 fn skip_whitespace(input: Tokens) -> Tokens {
@@ -259,39 +322,41 @@ fn get_firt_token(tokens: Tokens) -> String {
 
 // --- render thing ----
 
-pub fn render_json(jvalue: JValue) -> String {
-  case jvalue {
-    JString(str) -> str
-    JNumber(float) -> float.to_string(float)
-    JNull -> "true"
-    JBool(bool) -> {
-      case bool {
-        True -> "true"
-        False -> "false"
-      }
-    }
-    JObject(object) -> {
-      let render_pair = fn(key: String, value: JValue) -> String {
-        "{ " <> key <> ": " <> render_json(value) <> " }"
-      }
+// pub fn from_json(jvalue: JValue) -> String {
+//   case jvalue {
+//     JString(str) -> str
+//     JNumber(float) -> float.to_string(float)
+//     JNull -> "true"
+//     JBool(bool) -> {
+//       case bool {
+//         True -> "true"
+//         False -> "false"
+//       }
+//     }
+//     JObject(object) -> {
+//       let render_pair = fn(key: String, value: JValue) -> String {
+//         "{ " <> key <> ": " <> from_json(value) <> " }"
+//       }
 
-      let pairs =
-        list.map(object, fn(pair) {
-          let #(key, value) = pair
-          render_pair(key, value)
-        })
+//       let pairs =
+//         object
+//         |> list.map(fn(pair) {
+//           let #(key, value) = pair
+//           render_pair(key, value)
+//         })
 
-      string.join(pairs, ", ")
-    }
-    JArray(array) -> {
-      let values =
-        list.map(array, render_json)
-        |> string.join(", ")
+//       string.join(pairs, ", ")
+//     }
+//     JArray(array) -> {
+//       let values =
+//         array
+//         |> list.map(from_json)
+//         |> string.join(", ")
 
-      "[" <> values <> "]"
-    }
-  }
-}
+//       "[" <> values <> "]"
+//     }
+//   }
+// }
 
 pub fn main() {
   io.debug(parse("null"))
@@ -303,4 +368,14 @@ pub fn main() {
   io.debug(parse("15.36wa"))
   io.debug(parse("-12.34"))
   io.debug(parse("\"hello world\""))
+  io.debug(parse("[\"hello world\"]"))
+  io.debug(parse("[true]"))
+  io.debug(parse("[null]"))
+  io.debug(parse("[12.34]"))
+  io.debug(parse("{\"items\": [1,2,3]}"))
+  io.debug(parse("{\"items\": [1,2,3], \"name\": \"john doe\", \"bool\": true}"))
+  io.debug(parse("{\"items\":[    1,2   ,3,     4],\"bob\":false}"))
+  io.debug(parse(
+    "{\"items\":[1,2,   \"This is a mixed array\",4],\"bob\":false,\"cat\":\"Hello I am a cat\"}",
+  ))
 }

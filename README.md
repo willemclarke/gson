@@ -1,22 +1,7 @@
-# testing
+### gson (json parser in gleam)
 
-[![Package Version](https://img.shields.io/hexpm/v/testing)](https://hex.pm/packages/testing)
-[![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/testing/)
+Tried to follow along with the following article: https://parsed.dev/articles/Writing_your_own_JSON_parser_in_Haskell as parsing is
+quite unfamiliar to me.
 
-## Quick start
-
-```sh
-gleam run   # Run the project
-gleam test  # Run the tests
-gleam shell # Run an Erlang shell
-```
-
-## Installation
-
-If available on Hex this package can be added to your Gleam project:
-
-```sh
-gleam add testing
-```
-
-and its documentation can be found at <https://hexdocs.pm/testing>.
+Simple json parser for learning's sake, have a function called `parse` which takes a `String` and returns a type
+representing JSON values. 

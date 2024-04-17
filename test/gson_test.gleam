@@ -1,6 +1,6 @@
 import gleeunit
 import gleeunit/should
-import gson.{JBool, JNull, JNumber, ParseError}
+import gson.{JArray, JBool, JNull, JNumber, JString, ParseError}
 import gleam/string
 
 pub fn main() {
@@ -81,4 +81,131 @@ pub fn number_test() {
   string.split("invalid", "")
   |> gson.parse_number()
   |> should.equal(Error(ParseError(expected: "digit", got: "i")))
+}
+
+pub fn string_test() {
+  // valid cases
+  string.split("\"hello\"", "")
+  |> gson.parse_string()
+  |> should.equal(Ok(#(JString("hello"), [])))
+
+  string.split("\"Hello world \r\n\\QQQ 523\"", "")
+  |> gson.parse_string()
+  |> should.equal(Ok(#(JString("Hello world \r\nQQQ 523"), [])))
+
+  string.split("\"HELLO MAN 12323 25 SIXTY\"", "")
+  |> gson.parse_string()
+  |> should.equal(Ok(#(JString("HELLO MAN 12323 25 SIXTY"), [])))
+
+  // error case
+  string.split("2", "")
+  |> gson.parse_string()
+  |> should.equal(Error(ParseError(expected: "\"", got: "2")))
+
+  string.split("hello", "")
+  |> gson.parse_string()
+  |> should.equal(Error(ParseError(expected: "\"", got: "h")))
+}
+
+pub fn array_test() {
+  // valid cases
+  string.split("[]", "")
+  |> gson.parse_array()
+  |> should.equal(Ok(#(JArray([]), [])))
+
+  string.split("[null]", "")
+  |> gson.parse_array()
+  |> should.equal(Ok(#(JArray([JNull]), [])))
+
+  string.split("[true]", "")
+  |> gson.parse_array()
+  |> should.equal(Ok(#(JArray([JBool(True)]), [])))
+
+  string.split("[false]", "")
+  |> gson.parse_array()
+  |> should.equal(Ok(#(JArray([JBool(False)]), [])))
+
+  string.split("[1,2,3,4]", "")
+  |> gson.parse_array()
+  |> should.equal(
+    Ok(#(JArray([JNumber(1.0), JNumber(2.0), JNumber(3.0), JNumber(4.0)]), [])),
+  )
+
+  string.split("[1,2,[3,4]]", "")
+  |> gson.parse_array()
+  |> should.equal(
+    Ok(
+      #(
+        JArray([
+          JNumber(1.0),
+          JNumber(2.0),
+          JArray([JNumber(3.0), JNumber(4.0)]),
+        ]),
+        [],
+      ),
+    ),
+  )
+
+  // error case
+  string.split("", "")
+  |> gson.parse_array()
+  |> should.equal(Error(ParseError("[/]", "")))
+
+  string.split("{}", "")
+  |> gson.parse_array()
+  |> should.equal(Error(ParseError("[/]", "{")))
+
+  string.split("[", "")
+  |> gson.parse_array()
+  |> should.equal(Error(ParseError("]", "")))
+}
+
+pub fn parse_test() {
+  // null
+  gson.parse("null")
+  |> should.equal(Ok(#(JNull, [])))
+
+  // booleans
+  gson.parse("true")
+  |> should.equal(Ok(#(JBool(True), [])))
+
+  gson.parse("false")
+  |> should.equal(Ok(#(JBool(False), [])))
+
+  // strings
+  gson.parse("\"1234\"")
+  |> should.equal(Ok(#(JString("1234"), [])))
+
+  gson.parse("\"1234cat      \"")
+  |> should.equal(Ok(#(JString("1234cat"), [])))
+
+  // numbers
+  gson.parse("123")
+  |> should.equal(Ok(#(JNumber(123.0), [])))
+
+  gson.parse("-54.37   ")
+  |> should.equal(Ok(#(JNumber(-54.37), [])))
+
+  // arrays
+  gson.parse("[1,2,3,4]   ")
+  |> should.equal(
+    Ok(#(JArray([JNumber(1.0), JNumber(2.0), JNumber(3.0), JNumber(4.0)]), [])),
+  )
+
+  gson.parse("[true] 123")
+  |> should.equal(Ok(#(JArray([JBool(True)]), ["1", "2", "3"])))
+
+  gson.parse("[1,2,[3,4]]")
+  |> should.equal(
+    Ok(
+      #(
+        JArray([
+          JNumber(1.0),
+          JNumber(2.0),
+          JArray([JNumber(3.0), JNumber(4.0)]),
+        ]),
+        [],
+      ),
+    ),
+  )
 }

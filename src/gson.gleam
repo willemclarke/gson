@@ -7,6 +7,8 @@ import gleam/result
 
 // https://parsed.dev/articles/Writing_your_own_JSON_parser_in_Haskell
 
+// --- Parser ----
+
 pub type JValue {
   JString(String)
   JNumber(Float)
@@ -25,14 +27,23 @@ pub type Tokens =
 
 pub fn parse(input: String) -> Result(#(JValue, Tokens), ParseError) {
   let graphemes = string.to_graphemes(input)
+  let without_whitespace = skip_whitespace(graphemes)
 
-  let null = parse_null(graphemes)
-  let bool = parse_bool(graphemes)
-  let number = parse_number(graphemes)
+  parse_json(without_whitespace)
+}
 
-  null
-  |> result.or(bool)
-  |> result.or(number)
+pub fn parse_json(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
+  let try_null = parse_null(input)
+  let try_bool = parse_bool(input)
+  let try_number = parse_number(input)
+  let try_string = parse_string(input)
+  let try_array = parse_array(input)
+
+  try_null
+  |> result.or(try_bool)
+  |> result.or(try_number)
+  |> result.or(try_string)
+  |> result.or(try_array)
 }
 
 pub fn parse_null(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
@@ -47,6 +58,36 @@ pub fn parse_bool(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
     ["t", "r", "u", "e", ..input] -> Ok(#(JBool(True), input))
     ["f", "a", "l", "s", "e", ..input] -> Ok(#(JBool(False), input))
     _ -> Error(ParseError(expected: "true/false", got: got_to_string(input)))
+  }
+}
+
+pub fn parse_string(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
+  case input {
+    ["\"", ..rest] -> {
+      let #(string, remaining) = parse_string_inner(rest)
+      Ok(#(JString(string), remaining))
+    }
+    _ -> Error(ParseError(expected: "\"", got: get_firt_token(input)))
+  }
+}
+
+fn parse_string_inner(input: Tokens) -> #(String, Tokens) {
+  case input {
+    [] -> #("", [])
+
+    ["\"", ..rest] -> #("", rest)
+
+    ["\\", char, ..rest] -> {
+      let #(first, remaining) = parse_string_inner(rest)
+      let escaped = escape_character(char)
+
+      #(escaped <> first, remaining)
+    }
+
+    [char, ..rest] -> {
+      let #(first, remaining) = parse_string_inner(rest)
+      #(char <> first, remaining)
+    }
   }
 }
 
@@ -131,6 +172,74 @@ pub fn extract_integer(input: Tokens) -> #(Tokens, Tokens) {
   }
 }
 
+pub fn parse_array(input: Tokens) -> Result(#(JValue, Tokens), ParseError) {
+  case input {
+    ["[", "]"] -> Ok(#(JArray([]), []))
+
+    ["[", ..rest] -> {
+      parse_array_inner(skip_whitespace(rest))
+      |> result.map(fn(tuple) {
+        let #(list_items, remaining) = tuple
+        #(JArray(list_items), remaining)
+      })
+    }
+
+    _ -> Error(ParseError(expected: "[/]", got: get_firt_token(input)))
+  }
+}
+
+fn parse_array_inner(
+  input: Tokens,
+) -> Result(#(List(JValue), Tokens), ParseError) {
+  let parsed = parse_json(skip_whitespace(input))
+
+  case parsed {
+    Ok(#(jvalue, following)) -> {
+      case following {
+        [",", ..rest] -> {
+          parse_array_inner(skip_whitespace(rest))
+          |> result.map(fn(tuple) {
+            let #(first, remaining) = tuple
+            #([jvalue, ..first], remaining)
+          })
+        }
+
+        ["]", ..rest] -> Ok(#([jvalue], rest))
+
+        _ -> Ok(#([JArray([])], []))
+      }
+    }
+    Error(_) -> Error(ParseError(expected: "]", got: get_firt_token(input)))
+  }
+}
+
+// --- helper methods ---
+
+fn skip_whitespace(input: Tokens) -> Tokens {
+  case input {
+    [] -> []
+    ["[", "]", ..rest] -> skip_whitespace(rest)
+    [" ", ..rest] -> skip_whitespace(rest)
+    ["\n", ..rest] -> skip_whitespace(rest)
+    ["\r", ..rest] -> skip_whitespace(rest)
+    ["\t", ..rest] -> skip_whitespace(rest)
+    [char, ..rest] -> [char, ..skip_whitespace(rest)]
+  }
+}
+
+fn escape_character(char: String) -> String {
+  case char {
+    "\"" -> "\""
+    "\\" -> "\\"
+    "/" -> "/"
+    "b" -> "\u{8}"
+    "f" -> "\f"
+    "r" -> "\r"
+    "n" -> "\n"
+    _ -> char
+  }
+}
+
 pub fn is_digit(input: String) -> Bool {
   case input {
     "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
@@ -193,4 +302,5 @@ pub fn main() {
   io.debug(parse("1.5wa"))
   io.debug(parse("15.36wa"))
   io.debug(parse("-12.34"))
+  io.debug(parse("\"hello world\""))
 }

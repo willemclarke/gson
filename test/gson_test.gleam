@@ -1,7 +1,8 @@
 import gleeunit
 import gleeunit/should
-import gson.{JArray, JBool, JNull, JNumber, JString, ParseError}
+import gson.{JArray, JBool, JNull, JNumber, JObect, JString, ParseError}
 import gleam/string
+import gleam/dict
 
 pub fn main() {
   gleeunit.main()
@@ -204,6 +205,46 @@ pub fn parse_test() {
           JNumber(2.0),
           JArray([JNumber(3.0), JNumber(4.0)]),
         ]),
+        [],
+      ),
+    ),
+  )
+
+  gson.parse("{\"items\": [1,2,3]}")
+  |> should.equal(
+    Ok(
+      #(
+        JObect(
+          dict.from_list([
+            #("items", JArray([JNumber(1.0), JNumber(2.0), JNumber(3.0)])),
+          ]),
+        ),
+        [],
+      ),
+    ),
+  )
+
+  gson.parse(
+    "{\"items\":[1,2,   \"This is a mixed array\",4],\"bob\":false,\"cat\":\"Hello I am a cat\"}",
+  )
+  |> should.equal(
+    Ok(
+      #(
+        JObect(
+          dict.from_list([
+            #("bob", JBool(False)),
+            #("cat", JString("HelloIamacat")),
+            #(
+              "items",
+              JArray([
+                JNumber(1.0),
+                JNumber(2.0),
+                JString("Thisisamixedarray"),
+                JNumber(4.0),
+              ]),
+            ),
+          ]),
+        ),
         [],
       ),
     ),
